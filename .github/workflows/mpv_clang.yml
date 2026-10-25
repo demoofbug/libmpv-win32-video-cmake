@@ -91,6 +91,7 @@ jobs:
         run: |
           cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 -DCOMPILER_TOOLCHAIN=clang ${{ env.x86_64_v3_ARCH }} -DCMAKE_INSTALL_PREFIX=$PWD/clang_root -DMINGW_INSTALL_PREFIX=$PWD/build_$BIT/$BIT-w64-mingw32 -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -G Ninja -B build_$BIT -S $PWD
           ninja -C build_$BIT download || true
+          ninja -C build_$BIT llvm
           ninja -C build_$BIT llvm-clang
 
       - name: Configuring CMake & Downloading source
