@@ -14,9 +14,73 @@ on:
 permissions:
   contents: write
 
+env:
+  # cache namespace; bump to invalidate every stale cache at once
+  CACHE_VERSION: v2
+
 jobs:
+  toolchain:
+    name: Building LLVM toolchain
+    runs-on: ubuntu-latest
+    container:
+      image: docker://ghcr.io/shinchiro/archlinux:latest
+    steps:
+      - name: Setup git config
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global pull.rebase true
+          git config --global rebase.autoStash true
+          git config --global fetch.prune true
+          git config --global --add safe.directory $PWD
+
+      - uses: actions/checkout@main
+
+      - name: Loading clang sysroot cache
+        uses: actions/cache/restore@main
+        with:
+          path: clang_root
+          key: ${{ env.CACHE_VERSION }}-clang_root-${{ github.run_id }}
+          restore-keys: |
+            ${{ env.CACHE_VERSION }}-clang_root
+
+      - name: Loading repository cache
+        uses: actions/cache/restore@main
+        with:
+          path: src_packages
+          key: ${{ env.CACHE_VERSION }}-repository-${{ github.run_id }}
+          restore-keys: |
+            ${{ env.CACHE_VERSION }}-repository
+
+      - name: Building llvm
+        run: |
+          # a cached llvm source tree may sit on the previous GIT_TAG branch;
+          # drop source and stamps so gitclone re-checks-out the wanted one
+          wanted=$(sed -n 's/^[[:space:]]*GIT_TAG[[:space:]]\+//p' toolchain/llvm/llvm.cmake | head -1)
+          current=""
+          [ -d src_packages/llvm ] && current=$(git -C src_packages/llvm rev-parse --abbrev-ref HEAD 2>/dev/null || echo none)
+          if [ "$current" != "$wanted" ]; then
+            rm -rf src_packages/llvm build/toolchain/llvm-prefix
+          fi
+          cmake -DTARGET_ARCH=x86_64-w64-mingw32 -DCOMPILER_TOOLCHAIN=clang -DCMAKE_INSTALL_PREFIX=$PWD/clang_root -DMINGW_INSTALL_PREFIX=$PWD/build/x86_64-w64-mingw32 -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -G Ninja -B build -S $PWD
+          ninja -C build download || true
+          ninja -C build llvm
+
+      - name: Saving clang sysroot cache
+        uses: actions/cache/save@main
+        with:
+          path: clang_root
+          key: ${{ env.CACHE_VERSION }}-clang_root-${{ github.run_id }}
+
+      - name: Saving repository cache
+        uses: actions/cache/save@main
+        with:
+          path: src_packages
+          key: ${{ env.CACHE_VERSION }}-repository-${{ github.run_id }}
+
   build_mpv:
     name: Building mpv
+    needs: toolchain
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -61,52 +125,38 @@ jobs:
       - uses: actions/checkout@main
 
       - name: Loading clang sysroot cache
-        id: load_clang_cache
         uses: actions/cache/restore@main
         with:
-          path: |
-            clang_root
-          key: ${{ secrets.CACHE_VERSION }}-clang_root-${{ github.run_id }}
+          path: clang_root
+          key: ${{ env.CACHE_VERSION }}-clang_root-${{ github.run_id }}
           restore-keys: |
-            ${{ secrets.CACHE_VERSION }}-clang_root
+            ${{ env.CACHE_VERSION }}-clang_root
 
       - name: Loading repository cache
         uses: actions/cache/restore@main
         with:
           path: src_packages
-          key: ${{ secrets.CACHE_VERSION }}-repository-${{ github.run_id }}
+          key: ${{ env.CACHE_VERSION }}-repository-${{ github.run_id }}
           restore-keys: |
-            ${{ secrets.CACHE_VERSION }}-repository
+            ${{ env.CACHE_VERSION }}-repository
 
       - name: Loading ${{ matrix.bit }} toolchain cache
         uses: actions/cache/restore@main
         with:
           path: |
             build_${{ matrix.bit }}
-          key: ${{ secrets.CACHE_VERSION }}-clang-${{ matrix.bit }}_toolchain-${{ github.run_id }}
+          key: ${{ env.CACHE_VERSION }}-clang-${{ matrix.bit }}_toolchain-${{ github.run_id }}
           restore-keys: |
-            ${{ secrets.CACHE_VERSION }}-clang-${{ matrix.bit }}_toolchain
-
-      - name: Building toolchain
-        run: |
-          # a cached llvm source tree may still sit on the previous GIT_TAG
-          # branch; drop source and stamps so gitclone re-checks-out
-          wanted=$(sed -n 's/^[[:space:]]*GIT_TAG[[:space:]]\+//p' toolchain/llvm/llvm.cmake | head -1)
-          current=""
-          [ -d src_packages/llvm ] && current=$(git -C src_packages/llvm rev-parse --abbrev-ref HEAD 2>/dev/null || echo none)
-          if [ "$current" != "$wanted" ]; then
-            rm -rf src_packages/llvm
-            rm -rf build_$BIT/toolchain/llvm-prefix
-          fi
-          cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 -DCOMPILER_TOOLCHAIN=clang ${{ env.x86_64_v3_ARCH }} -DCMAKE_INSTALL_PREFIX=$PWD/clang_root -DMINGW_INSTALL_PREFIX=$PWD/build_$BIT/$BIT-w64-mingw32 -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -G Ninja -B build_$BIT -S $PWD
-          ninja -C build_$BIT download || true
-          ninja -C build_$BIT llvm
-          ninja -C build_$BIT llvm-clang
+            ${{ env.CACHE_VERSION }}-clang-${{ matrix.bit }}_toolchain
 
       - name: Configuring CMake & Downloading source
         run: |
           cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 -DCOMPILER_TOOLCHAIN=clang ${{ env.x86_64_v3_ARCH }} -DBUILD_VERSION=${{ env.version }} -DCMAKE_INSTALL_PREFIX=$PWD/clang_root -DMINGW_INSTALL_PREFIX=$PWD/build_$BIT/$BIT-w64-mingw32 -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -DENABLE_CCACHE=ON -DCLANG_PACKAGES_LTO=ON -G Ninja --fresh -B build_$BIT -S $PWD
           ninja -C build_$BIT download || true
+
+      - name: Building toolchain
+        run: |
+          ninja -C build_$BIT llvm-clang
 
       - name: Building mpv
         run: |
@@ -158,48 +208,20 @@ jobs:
         run: |
           ninja -C build_$BIT cargo-clean || true
 
-      - name: Saving clang sysroot cache
-        uses: actions/cache/save@main
-        if: ${{ always() && matrix.bit == 'x86_64' }}
-        with:
-          path: |
-            clang_root
-          key: ${{ secrets.CACHE_VERSION }}-clang_root-${{ github.run_id }}
-
-      - name: Saving repository cache
-        uses: actions/cache/save@main
-        if: ${{ always() && matrix.bit == 'x86_64' }}
-        with:
-          path: src_packages
-          key: ${{ secrets.CACHE_VERSION }}-repository-${{ github.run_id }}
-
       - name: Saving ${{ matrix.bit }} toolchain cache
         uses: actions/cache/save@main
         if: always()
         with:
           path: |
             build_${{ matrix.bit }}
-          key: ${{ secrets.CACHE_VERSION }}-clang-${{ matrix.bit }}_toolchain-${{ github.run_id }}
+          key: ${{ env.CACHE_VERSION }}-clang-${{ matrix.bit }}_toolchain-${{ github.run_id }}
 
       - name: Saving release_${{ matrix.bit }} cache
         uses: actions/cache/save@main
         if: ${{ always() && startsWith(github.ref, 'refs/tags/') }}
         with:
           path: release_${{ matrix.bit }}
-          key: ${{ secrets.CACHE_VERSION }}-release_${{ matrix.bit }}-${{ github.run_id }}
-
-      - name: Delete previous cache
-        if: ${{ always() && matrix.bit == 'x86_64' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CURL_RETRIES: "--connect-timeout 60 --retry 999 --retry-delay 5 --retry-all-errors"
-          CACHE_ID: ${{ steps.load_clang_cache.outputs.cache-matched-key }}
-          PREFIX: ${{ secrets.CACHE_VERSION }}
-        run: |
-          cache_key=${CACHE_ID##*-}
-          for suffix in clang_root repository clang-i686_toolchain clang-x86_64_toolchain clang-x86_64_v3_toolchain clang-aarch64_toolchain; do
-            curl $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/$GITHUB_REPOSITORY/actions/caches?key=$PREFIX-$suffix-$cache_key
-          done
+          key: ${{ env.CACHE_VERSION }}-release_${{ matrix.bit }}-${{ github.run_id }}
 
   release:
     name: Upload releases
@@ -209,11 +231,10 @@ jobs:
     permissions:
       contents: write
     env:
-      CURL_RETRIES: "--connect-timeout 60 --retry 999 --retry-delay 5 --retry-all-errors"
-      release_i686_key: ${{ secrets.CACHE_VERSION }}-release_i686-${{ github.run_id }}
-      release_x86_64_key: ${{ secrets.CACHE_VERSION }}-release_x86_64-${{ github.run_id }}
-      release_x86_64_v3_key: ${{ secrets.CACHE_VERSION }}-release_x86_64_v3-${{ github.run_id }}
-      release_aarch64_key: ${{ secrets.CACHE_VERSION }}-release_aarch64-${{ github.run_id }}
+      release_i686_key: ${{ env.CACHE_VERSION }}-release_i686-${{ github.run_id }}
+      release_x86_64_key: ${{ env.CACHE_VERSION }}-release_x86_64-${{ github.run_id }}
+      release_x86_64_v3_key: ${{ env.CACHE_VERSION }}-release_x86_64_v3-${{ github.run_id }}
+      release_aarch64_key: ${{ env.CACHE_VERSION }}-release_aarch64-${{ github.run_id }}
     container:
       image: docker://alpine:latest
 
