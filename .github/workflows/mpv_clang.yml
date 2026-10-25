@@ -96,10 +96,13 @@ jobs:
 
       - name: Building toolchain
         run: |
-          # llvm-wrapper stamps may be restored from a cache saved against a
-          # different clang_root; drop them so ninja recreates the
-          # arch-prefixed tool symlinks in the restored clang_root
+          # llvm-wrapper has no dependency edge on the llvm target, so a cold
+          # clang_root needs llvm built first or the arch-prefixed wrapper
+          # scripts point at a missing clang; wrapper stamps may also be
+          # restored against a different clang_root, so force the symlinks
+          # to be recreated in the restored one
           rm -rf build_$BIT/toolchain/llvm-wrapper-prefix
+          ninja -C build_$BIT llvm
           ninja -C build_$BIT llvm-clang
 
       - name: Building mpv
