@@ -131,14 +131,12 @@ jobs:
           retention-days: 1
 
       - name: Uploading ${{ matrix.bit }} build
-        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@master
         with:
           name: mpv-${{ matrix.bit }}
           path: release_${{ matrix.bit }}/mpv-${{ env.arch }}*
 
       - name: Uploading ${{ matrix.bit }} debug
-        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@master
         with:
           name: mpv-${{ matrix.bit }}-debug
