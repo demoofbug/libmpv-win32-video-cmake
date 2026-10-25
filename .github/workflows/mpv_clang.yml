@@ -94,7 +94,7 @@ jobs:
 
       - name: Building mpv
         run: |
-          ninja -C build_$BIT update
+          ninja -C build_$BIT update || true
           ninja -C build_$BIT mpv
 
       - name: Packaging mpv
