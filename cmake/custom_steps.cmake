@@ -95,9 +95,16 @@ function(force_rebuild_git _name)
 file(WRITE ${stamp_dir}/reset_head.sh
 "#!/bin/bash
 set -e
-if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\" -nt \"${stamp_dir}/${_name}-patch\" || ! -f \"${stamp_dir}/HEAD\" || \"$(cat ${stamp_dir}/HEAD)\" != \"$(git -C ${source_dir} rev-parse @{u})\" ]]; then
-    echo ${source_dir}
-    git -C ${source_dir} reset --hard ${reset} -q
+if ref=\$(git -C ${source_dir} rev-parse --verify -q @{u}); then
+    target='${reset}'
+else
+    # tag/commit checkouts are detached: compare against and reset to HEAD
+    ref=\$(git -C ${source_dir} rev-parse HEAD)
+    target=HEAD
+fi
+if [[ -z \"\$target\" ]]; then target=HEAD; fi
+if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\" -nt \"${stamp_dir}/${_name}-patch\" || ! -f \"${stamp_dir}/HEAD\" || \"\$(cat ${stamp_dir}/HEAD)\" != \"\$ref\" ]]; then
+    git -C ${source_dir} reset --hard \$target -q
     if [[ -z \"${git_reset}\" ]]; then
         find \"${stamp_dir}\" -type f  ! -iname '*.cmake' -size 0c -delete
         echo \"Removing ${_name} stamp files.\"
