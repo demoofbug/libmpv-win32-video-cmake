@@ -17,8 +17,7 @@ ExternalProject_Add(mpv
         spirv-cross
     GIT_REPOSITORY https://github.com/mpv-player/mpv.git
     SOURCE_DIR ${SOURCE_LOCATION}
-    GIT_TAG v0.39.0
-    PATCH_COMMAND ${EXEC} git apply ${CMAKE_CURRENT_SOURCE_DIR}/mpv-*.patch
+    GIT_TAG v0.41.0
     UPDATE_COMMAND ""
     CONFIGURE_COMMAND ${EXEC} CONF=1 meson setup <BINARY_DIR> <SOURCE_DIR>
         --prefix=${MINGW_INSTALL_PREFIX}
@@ -72,24 +71,13 @@ ExternalProject_Add_Step(mpv copy-binary
     COMMENT "Copying mpv binaries and manual"
 )
 
-set(RENAME ${CMAKE_CURRENT_BINARY_DIR}/mpv-prefix/src/rename.sh)
-file(WRITE ${RENAME}
-"#!/bin/bash
-cd $1
-GIT=$(git rev-parse --short=7 HEAD)
-mv $2 $2-git-\${GIT}")
-
 ExternalProject_Add_Step(mpv copy-package-dir
     DEPENDEES copy-binary
-    COMMAND chmod 755 ${RENAME}
-    COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-package ${CMAKE_BINARY_DIR}/mpv-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
-    COMMAND ${RENAME} <SOURCE_DIR> ${CMAKE_BINARY_DIR}/mpv-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+    COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-package ${CMAKE_BINARY_DIR}/mpv-${TARGET_CPU}${x86_64_LEVEL}-${BUILD_VERSION}
 
-    COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-debug ${CMAKE_BINARY_DIR}/mpv-debug-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
-    COMMAND ${RENAME} <SOURCE_DIR> ${CMAKE_BINARY_DIR}/mpv-debug-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+    COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-debug ${CMAKE_BINARY_DIR}/mpv-debug-${TARGET_CPU}${x86_64_LEVEL}-${BUILD_VERSION}
 
-    COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev ${CMAKE_BINARY_DIR}/mpv-dev-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
-    COMMAND ${RENAME} <SOURCE_DIR> ${CMAKE_BINARY_DIR}/mpv-dev-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+    COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev ${CMAKE_BINARY_DIR}/mpv-dev-${TARGET_CPU}${x86_64_LEVEL}-${BUILD_VERSION}
     COMMENT "Moving mpv package folder"
     LOG 1
 )
