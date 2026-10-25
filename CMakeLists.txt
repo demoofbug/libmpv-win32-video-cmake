@@ -125,7 +125,11 @@ if(TARGET_CPU STREQUAL "x86_64")
     endif()
 endif()
 
-string(TIMESTAMP BUILDDATE "%Y%m%d" UTC)
+set(BUILD_VERSION "" CACHE STRING "Build version: engine version + build number (e.g. v0.41.0+1); empty = read from version.txt")
+if(BUILD_VERSION STREQUAL "")
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/version.txt BUILD_VERSION)
+    string(STRIP "${BUILD_VERSION}" BUILD_VERSION)
+endif()
 
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/publish.in)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/publish.in ${CMAKE_CURRENT_BINARY_DIR}/publish)

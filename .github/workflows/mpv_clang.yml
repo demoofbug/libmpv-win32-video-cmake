@@ -4,28 +4,20 @@ defaults:
     shell: bash
 
 on:
-  workflow_dispatch:
-    inputs:
-      command:
-        description: 'Run custom command before building'
-        required: false
-        type: string
-      github_release:
-        description: 'Upload to Github release'
-        required: false
-        default: false
-        type: boolean
-      mpv_tarball:
-        description: 'Build latest mpv tarball'
-        required: false
-        default: false
-        type: boolean
+  push:
+    tags:
+      - "*"
+  pull_request:
+    branches:
+      - "*"
+
+permissions:
+  contents: write
 
 jobs:
   build_mpv:
     name: Building mpv
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion != 'failure' }}
     strategy:
       fail-fast: false
       matrix:
@@ -34,8 +26,6 @@ jobs:
       BIT: ${{ matrix.bit }}
     container:
       image: docker://ghcr.io/shinchiro/archlinux:latest
-    outputs:
-      mpv_ver: ${{ steps.build_mpv_step.outputs.mpv_ver }}
     steps:
       - name: Init variable
         run: |
@@ -51,6 +41,14 @@ jobs:
             echo "arch=aarch64" >> $GITHUB_ENV
           fi
 
+      - name: Build version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          else
+            echo "version=develop" >> $GITHUB_ENV
+          fi
+
       - name: Setup git config
         run: |
           git config --global user.name "github-actions"
@@ -61,8 +59,6 @@ jobs:
           git config --global --add safe.directory $PWD
 
       - uses: actions/checkout@main
-        with:
-          ref: master
 
       - name: Loading clang sysroot cache
         id: load_clang_cache
@@ -91,29 +87,20 @@ jobs:
           restore-keys: |
             ${{ secrets.CACHE_VERSION }}-clang-${{ matrix.bit }}_toolchain
 
-      - name: Running custom command
-        if: ${{ github.event.inputs.command != '' }}
-        continue-on-error: true
-        run: ${{ github.event.inputs.command }}
-
       - name: Configuring CMake & Downloading source
         run: |
-          cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 -DCOMPILER_TOOLCHAIN=clang ${{ env.x86_64_v3_ARCH }} -DCMAKE_INSTALL_PREFIX=$PWD/clang_root -DMINGW_INSTALL_PREFIX=$PWD/build_$BIT/$BIT-w64-mingw32 -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -DENABLE_CCACHE=ON -DCLANG_PACKAGES_LTO=ON -G Ninja --fresh -B build_$BIT -S $PWD
+          cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 -DCOMPILER_TOOLCHAIN=clang ${{ env.x86_64_v3_ARCH }} -DBUILD_VERSION=${{ env.version }} -DCMAKE_INSTALL_PREFIX=$PWD/clang_root -DMINGW_INSTALL_PREFIX=$PWD/build_$BIT/$BIT-w64-mingw32 -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -DENABLE_CCACHE=ON -DCLANG_PACKAGES_LTO=ON -G Ninja --fresh -B build_$BIT -S $PWD
           ninja -C build_$BIT download || true
 
       - name: Building mpv
-        id: build_mpv_step
-        env:
-          MPV_TARBALL: ${{ github.event.inputs.mpv_tarball }}
         run: |
           ninja -C build_$BIT update
-          $MPV_TARBALL && ninja -C build_$BIT mpv-release || ninja -C build_$BIT mpv
-          $MPV_TARBALL && echo "mpv_ver=$(cat build_$BIT/packages/mpv-release-prefix/VERSION)" >> $GITHUB_OUTPUT || echo "mpv_ver=UNKNOWN" >> $GITHUB_OUTPUT
+          ninja -C build_$BIT mpv
 
       - name: Packaging mpv
         run: |
           mkdir -p release_$BIT
-          ninja -C build_$BIT mpv-packaging; mv build_$BIT/mpv*.7z release_$BIT
+          ninja -C build_$BIT mpv-packaging; mv build_$BIT/mpv*.zip release_$BIT
 
       - name: Collecting logs
         if: always()
@@ -146,12 +133,12 @@ jobs:
         if: always()
         run: |
           rm -rf build_$BIT/mpv*
-          rm -rf release_$BIT/mpv-debug*.7z
+          rm -rf release_$BIT/mpv-debug*.zip
 
       - name: Cleaning rust toolchain directory
         if: always()
         run: |
-          ninja -C build_$BIT cargo-clean
+          ninja -C build_$BIT cargo-clean || true
 
       - name: Saving clang sysroot cache
         uses: actions/cache/save@main
@@ -178,6 +165,7 @@ jobs:
 
       - name: Saving release_${{ matrix.bit }} cache
         uses: actions/cache/save@main
+        if: always()
         with:
           path: release_${{ matrix.bit }}
           key: ${{ secrets.CACHE_VERSION }}-release_${{ matrix.bit }}-${{ github.run_id }}
@@ -191,19 +179,18 @@ jobs:
           PREFIX: ${{ secrets.CACHE_VERSION }}
         run: |
           cache_key=${CACHE_ID##*-}
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang_root-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-repository-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang-i686_toolchain-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang-x86_64_toolchain-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang-x86_64_v3_toolchain-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang-aarch64_toolchain-$cache_key
+          for suffix in clang_root repository clang-i686_toolchain clang-x86_64_toolchain clang-x86_64_v3_toolchain clang-aarch64_toolchain; do
+            curl $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/$GITHUB_REPOSITORY/actions/caches?key=$PREFIX-$suffix-$cache_key
+          done
 
   release:
     name: Upload releases
     runs-on: ubuntu-latest
     needs: build_mpv
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     env:
-      GH_TOKEN: ${{ github.token }}
       CURL_RETRIES: "--connect-timeout 60 --retry 999 --retry-delay 5 --retry-all-errors"
       release_i686_key: ${{ secrets.CACHE_VERSION }}-release_i686-${{ github.run_id }}
       release_x86_64_key: ${{ secrets.CACHE_VERSION }}-release_x86_64-${{ github.run_id }}
@@ -216,14 +203,7 @@ jobs:
       - name: Installing dependencies
         shell: sh
         run: |
-          apk add --update --no-cache bash git file openssh curl tar zstd jq
-          git config --global pull.rebase true
-          git config --global fetch.prune true
-          git config --global --add safe.directory $PWD
-
-      - uses: actions/checkout@main
-        with:
-          ref: master
+          apk add --update --no-cache bash curl
 
       - name: Loading release_i686 cache
         uses: actions/cache/restore@main
@@ -255,22 +235,11 @@ jobs:
           mv release_i686/* release_x86_64/* release_x86_64_v3/* release_aarch64/* release
           du -ah release/*
 
-      - name: Uploading packages to Github release
-        id: upload_packages_gh
-        if: ${{ github.event.inputs.github_release == 'true' && github.event.inputs.mpv_tarball == 'false' }}
-        continue-on-error: true
-        run: |
-          short_date=$(date "+%Y%m%d")
-          body=$(cat <<END
-          **Workflow run**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
-          END
-          )
-          id=$(curl -u media-kit:$GH_TOKEN $CURL_RETRIES -s -X POST -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/media-kit/libmpv-win32-audio-cmake/releases -d @- <<END | jq -r '.id'
-          {
-            "tag_name": "$short_date",
-            "name": "$short_date",
-            "body": "$(echo ${body//$'\n'/'\n'})"
-          }
-          END
-          )
-          for file in release/*.7z; do curl -u media-kit:$GH_TOKEN $CURL_RETRIES -X POST -H "Accept: application/vnd.github.v3+json" -H "Content-Type: $(file -b --mime-type $file)" https://uploads.github.com/repos/media-kit/libmpv-win32-audio-cmake/releases/$id/assets?name=$(basename $file) --data-binary @$file; done
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          fail_on_unmatched_files: true
+          body: |
+            **Workflow run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: |
+            release/*.zip
