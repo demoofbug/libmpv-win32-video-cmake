@@ -68,12 +68,14 @@ jobs:
 
       - name: Saving clang sysroot cache
         uses: actions/cache/save@main
+        if: ${{ !cancelled() }}
         with:
           path: clang_root
           key: ${{ env.CACHE_VERSION }}-clang_root-${{ github.run_id }}
 
       - name: Saving repository cache
         uses: actions/cache/save@main
+        if: ${{ !cancelled() }}
         with:
           path: src_packages
           key: ${{ env.CACHE_VERSION }}-repository-${{ github.run_id }}
