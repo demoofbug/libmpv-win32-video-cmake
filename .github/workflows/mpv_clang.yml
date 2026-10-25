@@ -230,11 +230,6 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
-    env:
-      release_i686_key: ${{ env.CACHE_VERSION }}-release_i686-${{ github.run_id }}
-      release_x86_64_key: ${{ env.CACHE_VERSION }}-release_x86_64-${{ github.run_id }}
-      release_x86_64_v3_key: ${{ env.CACHE_VERSION }}-release_x86_64_v3-${{ github.run_id }}
-      release_aarch64_key: ${{ env.CACHE_VERSION }}-release_aarch64-${{ github.run_id }}
     container:
       image: docker://alpine:latest
 
@@ -248,25 +243,25 @@ jobs:
         uses: actions/cache/restore@main
         with:
           path: release_i686
-          key: ${{ env.release_i686_key }}
+          key: ${{ env.CACHE_VERSION }}-release_i686-${{ github.run_id }}
 
       - name: Loading release_x86_64 cache
         uses: actions/cache/restore@main
         with:
           path: release_x86_64
-          key: ${{ env.release_x86_64_key }}
+          key: ${{ env.CACHE_VERSION }}-release_x86_64-${{ github.run_id }}
 
       - name: Loading release_x86_64_v3 cache
         uses: actions/cache/restore@main
         with:
           path: release_x86_64_v3
-          key: ${{ env.release_x86_64_v3_key }}
+          key: ${{ env.CACHE_VERSION }}-release_x86_64_v3-${{ github.run_id }}
 
       - name: Loading release_aarch64 cache
         uses: actions/cache/restore@main
         with:
           path: release_aarch64
-          key: ${{ env.release_aarch64_key }}
+          key: ${{ env.CACHE_VERSION }}-release_aarch64-${{ github.run_id }}
 
       - name: Moving archives
         run: |
