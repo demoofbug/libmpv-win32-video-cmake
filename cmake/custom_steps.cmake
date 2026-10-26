@@ -3,7 +3,6 @@ function(cleanup _name _last_step)
     get_property(_git_repository TARGET ${_name} PROPERTY _EP_GIT_REPOSITORY)
     get_property(_url TARGET ${_name} PROPERTY _EP_URL)
     get_property(git_tag TARGET ${_name} PROPERTY _EP_GIT_TAG)
-    get_property(git_remote_name TARGET ${_name} PROPERTY _EP_GIT_REMOTE_NAME)
     get_property(stamp_dir TARGET ${_name} PROPERTY _EP_STAMP_DIR)
     get_property(source_dir TARGET ${_name} PROPERTY _EP_SOURCE_DIR)
 
@@ -79,37 +78,34 @@ endfunction()
 function(force_rebuild_git _name)
     get_property(git_tag TARGET ${_name} PROPERTY _EP_GIT_TAG)
     get_property(git_reset TARGET ${_name} PROPERTY _EP_GIT_RESET)
-    get_property(git_remote_name TARGET ${_name} PROPERTY _EP_GIT_REMOTE_NAME)
     get_property(stamp_dir TARGET ${_name} PROPERTY _EP_STAMP_DIR)
     get_property(source_dir TARGET ${_name} PROPERTY _EP_SOURCE_DIR)
 
-    if("${git_remote_name}" STREQUAL "" AND NOT "${git_tag}" STREQUAL "")
-        # GIT_REMOTE_NAME is not set when commit hash is specified
-        set(reset "")
-    elseif(NOT "${git_reset}" STREQUAL "")
-        set(reset "${git_reset}")
-    else()
-        set(reset "@{u}") # eg: origin/master
-    endif()
-
+    # Resolve what the tree should be reset to, in priority order:
+    #   GIT_RESET: explicit commit pin
+    #   @{u}:      branch tracking (floating sources)
+    #   GIT_TAG:   tag/commit checkout, which is detached and has no upstream
+    # A detached checkout must compare against the pin, not HEAD: HEAD carries
+    # the git-am patch commits and never matches the stamp written before
+    # patching, so every force-update would wipe the stamps and try to apply
+    # the patches to an already-patched tree. When the tree is actually moved
+    # to the pin, drop every stamp so the patch step reruns on a clean tree.
 file(WRITE ${stamp_dir}/reset_head.sh
 "#!/bin/bash
 set -e
-if ref=\$(git -C ${source_dir} rev-parse --verify -q @{u}); then
-    target='${reset}'
+if [[ -n \"${git_reset}\" ]]; then
+    target='${git_reset}'
+elif [[ -n \"${git_tag}\" ]] && ! git -C ${source_dir} rev-parse --verify -q @{u} > /dev/null; then
+    target='${git_tag}'
 else
-    # tag/commit checkouts are detached: compare against and reset to HEAD
-    ref=\$(git -C ${source_dir} rev-parse HEAD)
-    target=HEAD
+    target='@{u}' # eg: origin/master
 fi
-if [[ -z \"\$target\" ]]; then target=HEAD; fi
+ref=\$(git -C ${source_dir} rev-parse -q --verify \"\$target^{commit}\" || git -C ${source_dir} rev-parse HEAD)
 if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\" -nt \"${stamp_dir}/${_name}-patch\" || ! -f \"${stamp_dir}/HEAD\" || \"\$(cat ${stamp_dir}/HEAD)\" != \"\$ref\" ]]; then
     git -C ${source_dir} reset --hard \$target -q
-    if [[ -z \"${git_reset}\" ]]; then
-        find \"${stamp_dir}\" -type f  ! -iname '*.cmake' -size 0c -delete
-        echo \"Removing ${_name} stamp files.\"
-        git -C ${source_dir} rev-parse HEAD > ${stamp_dir}/HEAD
-    fi
+    find \"${stamp_dir}\" -type f  ! -iname '*.cmake' -size 0c -delete
+    echo \"Removing ${_name} stamp files.\"
+    git -C ${source_dir} rev-parse HEAD > ${stamp_dir}/HEAD
 else
     git -C ${source_dir} reset --hard -q
 fi")
