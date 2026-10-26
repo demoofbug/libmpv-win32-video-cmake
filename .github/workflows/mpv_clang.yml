@@ -108,6 +108,22 @@ jobs:
               fi
             done
           fi
+          # A cache saved mid-checkout can leave a sparse tree without the
+          # files the build needs (llvm lost compiler-rt/lib/builtins), while
+          # the download stamp still suppresses a re-clone. Reapply the
+          # sparse patterns; if the tree is still incomplete, rebuild llvm.
+          if [ -d src_packages/llvm/.git ]; then
+            git -C src_packages/llvm sparse-checkout reapply || true
+            if [ ! -d src_packages/llvm/compiler-rt/lib/builtins ]; then
+              echo "llvm source is incomplete, dropping it for a re-clone"
+              rm -rf src_packages/llvm build_$BIT/toolchain/llvm-prefix \
+                     build_$BIT/toolchain/llvm-wrapper-prefix \
+                     build_$BIT/toolchain/llvm-compiler-rt-builtin-prefix \
+                     build_$BIT/toolchain/llvm-libcxx-prefix \
+                     build_$BIT/toolchain/llvm-compiler-rt-prefix \
+                     build_$BIT/toolchain/llvm-openmp-prefix
+            fi
+          fi
 
       - name: Configuring CMake & Downloading source
         run: |
