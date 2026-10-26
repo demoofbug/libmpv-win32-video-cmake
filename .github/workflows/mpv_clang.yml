@@ -98,11 +98,22 @@ jobs:
         run: |
           # llvm-wrapper has no dependency edge on the llvm target, so a cold
           # clang_root needs llvm built first or the arch-prefixed wrapper
-          # scripts point at a missing clang; wrapper stamps may also be
-          # restored against a different clang_root, so force the symlinks
-          # to be recreated in the restored one
-          rm -rf build_$BIT/toolchain/llvm-wrapper-prefix
-          ninja -C build_$BIT llvm
+          # scripts point at a missing clang. Rebuild the wrapper only when
+          # the restored sysroot actually lacks it: deleting the wrapper
+          # prefix refreshes its stamps, which drags mingw-w64-crt and every
+          # downstream toolchain step into a rebuild on warm caches.
+          if [ ! -x clang_root/bin/clang ]; then
+            ninja -C build_$BIT llvm
+          fi
+          if [ ! -x clang_root/bin/${arch}-w64-mingw32-ar ]; then
+            rm -rf build_$BIT/toolchain/llvm-wrapper-prefix
+            # A wrapper rebuild dirties crt-configure, and crt's source tree
+            # was cleaned after its install; drop its stamps so the step
+            # reruns from autoreconf instead of a half-cleaned build dir.
+            find build_$BIT/toolchain/mingw-w64-crt-prefix/src/mingw-w64-crt-stamp \
+              -type f -size 0 ! -iname '*.cmake' -delete
+            ninja -C build_$BIT llvm-wrapper
+          fi
           ninja -C build_$BIT llvm-clang
 
       - name: Building mpv
@@ -147,11 +158,6 @@ jobs:
         run: |
           rm -rf build_$BIT/mpv*
           rm -rf release_$BIT/mpv-debug*.zip
-
-      - name: Cleaning rust toolchain directory
-        if: always()
-        run: |
-          ninja -C build_$BIT cargo-clean || true
 
       - name: Saving clang sysroot cache
         uses: actions/cache/save@main
