@@ -19,7 +19,7 @@ on:
 env:
   # cache namespace; bump to invalidate every stale cache at once.
   # must stay in sync with mpv_clang.yml so warmed caches are shared
-  CACHE_VERSION: v3
+  CACHE_VERSION: v4
 
 jobs:
   build_llvm:

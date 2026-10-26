@@ -16,7 +16,7 @@ permissions:
 
 env:
   # cache namespace; bump to invalidate every stale cache at once
-  CACHE_VERSION: v3
+  CACHE_VERSION: v4
 
 jobs:
   build_mpv:
