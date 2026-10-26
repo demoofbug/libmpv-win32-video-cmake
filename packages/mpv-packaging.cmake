@@ -3,10 +3,11 @@ file(WRITE ${PACKAGE}
 "#!/bin/bash
 7z x -y $1/d3dcompiler*.7z
 for dir in $2/mpv*$3*; do
-if [ -d $dir ] && [[ $dir =~ ^mpv-$3.* ]]; then
+name=$(basename \"$dir\")
+if [ -d $dir ] && [[ $name =~ ^mpv-$3 ]]; then
     cp -r $1/mpv-root/* $1/$3/d3dcompiler_43.dll $dir
     7z a -tzip -mx=9 $dir.zip $dir/* -x!*.7z
-elif [ -d $dir ] && [[ $dir =~ mpv-.*$3$ ]]; then
+elif [ -d $dir ] && [[ $name =~ ^mpv-.*$3$ ]]; then
     cp -r $1/mpv-root/mpv $1/mpv-root/fonts $1/$3/d3dcompiler_43.dll $dir
     7z a -tzip -mx=9 $dir.zip $dir/* -x!*.7z
 elif [ -d $dir ]; then
