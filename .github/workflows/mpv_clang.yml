@@ -126,6 +126,18 @@ jobs:
             fi
           fi
 
+      - name: Normalize restored stamps
+        run: |
+          # actions/cache does not keep the relative mtimes of ExternalProject
+          # stamp files, so a restored tree can look like "download is newer
+          # than configure". That cascades into rebuilding the whole toolchain
+          # (mingw headers, crt, libcxx) on a warm cache. Touch the stamps in
+          # step order to restore the dependency ordering; force-update still
+          # deletes stamps, so real invalidation keeps working.
+          for step in mkdir download update check-git write-head patch autoreconf force-meson-configure configure build install postremovebuild done; do
+            find build_$BIT -type f -path "*-stamp/*" -name "*-$step" -exec touch {} + 2>/dev/null || true
+          done
+
       - name: Configuring CMake & Downloading source
         run: |
           cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 -DCOMPILER_TOOLCHAIN=clang ${{ env.x86_64_v3_ARCH }} -DBUILD_VERSION=${{ env.version }} -DCMAKE_INSTALL_PREFIX=$PWD/clang_root -DMINGW_INSTALL_PREFIX=$PWD/build_$BIT/$BIT-w64-mingw32 -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -DENABLE_CCACHE=ON -DCLANG_PACKAGES_LTO=ON -G Ninja --fresh -B build_$BIT -S $PWD
@@ -133,29 +145,31 @@ jobs:
 
       - name: Building toolchain
         run: |
-          # llvm-wrapper has no dependency edge on the llvm target, so a cold
-          # clang_root needs llvm built first or the arch-prefixed wrapper
-          # scripts point at a missing clang. Rebuild the wrapper only when
-          # the restored sysroot actually lacks it: deleting the wrapper
-          # prefix refreshes its stamps, which drags mingw-w64-crt and every
-          # downstream toolchain step into a rebuild on warm caches.
+          # The toolchain is a unit: clang in clang_root plus the MinGW runtime,
+          # winpthreads and libc++ in the sysroot. When it is already installed,
+          # do not touch the build tree at all - restored mtimes make ninja want
+          # to re-run toolchain steps, and a reconfigure of a restored
+          # llvm-libcxx build dir (out-of-source, never cleaned) inherits a stale
+          # CMake cache that breaks the header search path.
+          sysroot=build_$BIT/$BIT-w64-mingw32
+          if [ -x clang_root/bin/clang ] \
+             && [ -x clang_root/bin/${arch}-w64-mingw32-ar ] \
+             && [ -f "$sysroot/lib/libmingwex.a" ] \
+             && [ -f "$sysroot/lib/libwinpthread.a" ] \
+             && [ -f "$sysroot/lib/libc++.a" ] \
+             && [ -f "$sysroot/include/c++/v1/vector" ] \
+             && ls clang_root/lib/clang/*/lib/*/libcompiler_rt.a >/dev/null 2>&1; then
+            echo "toolchain is complete in clang_root + $sysroot; skipping"
+            exit 0
+          fi
+          # Rebuild every toolchain package from a clean build tree, keeping the
+          # llvm source and an already installed clang.
+          rm -rf build_$BIT/toolchain
           if [ ! -x clang_root/bin/clang ]; then
             ninja -C build_$BIT llvm
           fi
-          # compiler-rt/libcxx build from the llvm source tree; the cache
-          # repair may have dropped an incomplete checkout, and nothing else
-          # pulls the source because the installed clang is up to date.
           if [ ! -f src_packages/llvm/compiler-rt/lib/builtins/CMakeLists.txt ]; then
             ninja -C build_$BIT llvm-download
-          fi
-          if [ ! -x clang_root/bin/${arch}-w64-mingw32-ar ]; then
-            rm -rf build_$BIT/toolchain/llvm-wrapper-prefix
-            # A wrapper rebuild dirties crt-configure, and crt's source tree
-            # was cleaned after its install; drop its stamps so the step
-            # reruns from autoreconf instead of a half-cleaned build dir.
-            find build_$BIT/toolchain/mingw-w64-crt-prefix/src/mingw-w64-crt-stamp \
-              -type f -size 0 ! -iname '*.cmake' -delete
-            ninja -C build_$BIT llvm-wrapper
           fi
           ninja -C build_$BIT llvm-clang
 
