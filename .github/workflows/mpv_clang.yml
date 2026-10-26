@@ -89,6 +89,26 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_VERSION }}-clang-${{ matrix.bit }}_toolchain
 
+      - name: Repair cached sources
+        run: |
+          # An interrupted clone that gets saved into the repository cache
+          # leaves a source tree without .git. git then silently walks up to
+          # the build repository, so force-update refs and reset targets are
+          # resolved in the wrong repo and the package never builds again.
+          # Drop such trees together with their package prefix so the
+          # download step clones them from scratch.
+          if [ -d src_packages ]; then
+            for dir in src_packages/*/; do
+              name=$(basename "$dir")
+              if [ ! -e "$dir/.git" ]; then
+                echo "dropping incomplete source cache: $name"
+                rm -rf "$dir" \
+                       "build_$BIT/packages/$name-prefix" \
+                       "build_$BIT/toolchain/$name-prefix"
+              fi
+            done
+          fi
+
       - name: Configuring CMake & Downloading source
         run: |
           cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 -DCOMPILER_TOOLCHAIN=clang ${{ env.x86_64_v3_ARCH }} -DBUILD_VERSION=${{ env.version }} -DCMAKE_INSTALL_PREFIX=$PWD/clang_root -DMINGW_INSTALL_PREFIX=$PWD/build_$BIT/$BIT-w64-mingw32 -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -DENABLE_CCACHE=ON -DCLANG_PACKAGES_LTO=ON -G Ninja --fresh -B build_$BIT -S $PWD
