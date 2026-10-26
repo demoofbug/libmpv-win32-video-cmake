@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alfred Wingate <parona@protonmail.com>
+Date: Thu, 3 Sep 2026 19:10:43 +0000
+Subject: [PATCH] Add missing <exception> include for libcxx-23
+
+zimg 3.0.6 relies on a transitive include for std::exception_ptr and
+friends, which libc++ 23 no longer provides; zimg.cpp fails to compile
+with clang 23. Backport the upstream include fix.
+
+Fold in the long-standing MinGW <Windows.h> case fix as well, replacing
+the sed edit so the source tree stays a clean checkout for git am.
+
+Bug: https://bugs.gentoo.org/981879
+Signed-off-by: Alfred Wingate <parona@protonmail.com>
+---
+ src/zimg/api/zimg.cpp               | 1 +
+ src/zimg/common/arm/cpuinfo_arm.cpp | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/zimg/api/zimg.cpp b/src/zimg/api/zimg.cpp
+index 90eb082..1a63bc0 100644
+--- a/src/zimg/api/zimg.cpp
++++ b/src/zimg/api/zimg.cpp
+@@ -1,4 +1,5 @@
+ #include <cmath>
++#include <exception>
+ #include <memory>
+ #include <string>
+ #include <tuple>
+diff --git a/src/zimg/common/arm/cpuinfo_arm.cpp b/src/zimg/common/arm/cpuinfo_arm.cpp
+index 66bcf5c..69363ed 100644
+--- a/src/zimg/common/arm/cpuinfo_arm.cpp
++++ b/src/zimg/common/arm/cpuinfo_arm.cpp
+@@ -4,7 +4,7 @@
+   #define NOMINMAX
+   #define STRICT
+   #define WIN32_LEAN_AND_MEAN
+-  #include <Windows.h>
++  #include <windows.h>
+ #elif defined(__linux__)
+   #include <sys/auxv.h>
+   #include <asm/hwcap.h>
+-- 
+2.47.0
+
