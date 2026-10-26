@@ -100,7 +100,8 @@ jobs:
           if [ -d src_packages ]; then
             for dir in src_packages/*/; do
               name=$(basename "$dir")
-              if [ ! -e "$dir/.git" ]; then
+              # empty dirs are ExternalProject placeholders, not clones
+              if [ -n "$(ls -A "$dir")" ] && [ ! -e "$dir/.git" ]; then
                 echo "dropping incomplete source cache: $name"
                 rm -rf "$dir" \
                        "build_$BIT/packages/$name-prefix" \
@@ -140,6 +141,12 @@ jobs:
           # downstream toolchain step into a rebuild on warm caches.
           if [ ! -x clang_root/bin/clang ]; then
             ninja -C build_$BIT llvm
+          fi
+          # compiler-rt/libcxx build from the llvm source tree; the cache
+          # repair may have dropped an incomplete checkout, and nothing else
+          # pulls the source because the installed clang is up to date.
+          if [ ! -f src_packages/llvm/compiler-rt/lib/builtins/CMakeLists.txt ]; then
+            ninja -C build_$BIT llvm-download
           fi
           if [ ! -x clang_root/bin/${arch}-w64-mingw32-ar ]; then
             rm -rf build_$BIT/toolchain/llvm-wrapper-prefix
