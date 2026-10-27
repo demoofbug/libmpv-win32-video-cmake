@@ -265,7 +265,11 @@ jobs:
       - name: Installing dependencies
         shell: sh
         run: |
-          apk add --update --no-cache bash curl
+          apk add --update --no-cache bash curl git coreutils
+
+      # The checksum list is produced by the repository script, so the release
+      # job needs the repository too, not only the packaged artifacts.
+      - uses: actions/checkout@main
 
       - name: Loading release_i686 cache
         uses: actions/cache/restore@main
@@ -297,6 +301,14 @@ jobs:
           mv release_i686/* release_x86_64/* release_x86_64_v3/* release_aarch64/* release
           du -ah release/*
 
+      - name: Generating release SHA256SUMS
+        run: |
+          bash scripts/gen-sha256sums.sh gen release release/SHA256SUMS.txt
+
+      - name: Verifying release SHA256SUMS
+        run: |
+          bash scripts/gen-sha256sums.sh check release release/SHA256SUMS.txt 8
+
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
@@ -305,3 +317,88 @@ jobs:
             **Workflow run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           files: |
             release/*.zip
+            release/SHA256SUMS.txt
+
+  # The release job only runs on tags, so the list generator is proved here
+  # instead: same container, same packages, same script, fixture assets.
+  # Runs on pull requests, where no release is published.
+  checksums_selftest:
+    name: SHA256SUMS generator selftest (fixtures)
+    runs-on: ubuntu-latest
+    container:
+      image: docker://alpine:latest
+
+    steps:
+      - name: Installing dependencies
+        shell: sh
+        run: |
+          apk add --update --no-cache bash curl git coreutils
+
+      - uses: actions/checkout@main
+
+      - name: Generating, verifying and tamper-testing the list
+        run: |
+          set -euo pipefail
+          gen="bash scripts/gen-sha256sums.sh gen dist dist/SHA256SUMS.txt"
+          check="bash scripts/gen-sha256sums.sh check dist dist/SHA256SUMS.txt 3"
+
+          mkdir -p dist/inner
+          for name in mpv-i686-v0.0.0+1.zip mpv-x86_64-v0.0.0+1.zip mpv-dev-aarch64-v0.0.0+1.zip; do
+            head -c 4096 /dev/urandom > "dist/$name"
+          done
+
+          $gen
+
+          if grep -qvE '^[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._+-]*$' dist/SHA256SUMS.txt; then
+            echo 'ERROR: a row is not "<64 lowercase hex><space><space><basename>"' >&2
+            cat dist/SHA256SUMS.txt >&2
+            exit 1
+          fi
+          if grep -q $'\r' dist/SHA256SUMS.txt; then
+            echo 'ERROR: the list must be LF-only' >&2
+            exit 1
+          fi
+          if [ "$(tail -c 1 dist/SHA256SUMS.txt | od -An -tx1 | tr -d ' \n')" != 0a ]; then
+            echo 'ERROR: the list must end with a newline' >&2
+            exit 1
+          fi
+          if [ "$(grep -c . dist/SHA256SUMS.txt)" != 3 ]; then
+            echo 'ERROR: the list must hold exactly the three fixture assets' >&2
+            exit 1
+          fi
+          if grep -q inner dist/SHA256SUMS.txt; then
+            echo 'ERROR: a directory leaked into the list' >&2
+            exit 1
+          fi
+          LC_ALL=C sort -c -k2 dist/SHA256SUMS.txt
+
+          $check
+
+          # The expected-row-count guard has to bite: a missing bundle must
+          # fail the release even when the list matches the directory.
+          if bash scripts/gen-sha256sums.sh check dist dist/SHA256SUMS.txt 4; then
+            echo 'ERROR: check accepted a wrong expected row count' >&2
+            exit 1
+          fi
+
+          if $gen; then
+            echo 'ERROR: gen must not overwrite an existing list' >&2
+            exit 1
+          fi
+          cp dist/SHA256SUMS.txt first.txt
+          rm dist/SHA256SUMS.txt
+          $gen
+          cmp first.txt dist/SHA256SUMS.txt
+
+          # Tampering has to be caught. Run it against a copy so the list that
+          # was verified is the one built from the untouched fixtures.
+          tampered=$(mktemp -d)
+          cp -R dist/. "$tampered/"
+          printf 'tampered\n' >> "$tampered/mpv-i686-v0.0.0+1.zip"
+          if bash scripts/gen-sha256sums.sh check "$tampered" "$tampered/SHA256SUMS.txt"; then
+            echo 'ERROR: a tampered asset passed verification' >&2
+            exit 1
+          fi
+          rm -rf "$tampered"
+
+          $check
