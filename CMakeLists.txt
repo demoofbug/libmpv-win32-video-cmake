@@ -21,7 +21,7 @@ execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpmachine OUTPUT_VARIABLE HOST_AR
 string(REGEX MATCH "^[^-]+" HOST_CPU ${HOST_ARCH})
 
 execute_process(COMMAND meson --version OUTPUT_VARIABLE MESON_VERSION)
-if(NOT MESON_VERSION GREATER_EQUAL 1.3)
+if(NOT MESON_VERSION VERSION_GREATER_EQUAL "1.3.0")
     message(FATAL_ERROR "Meson 1.3.0 or greater is required. Install it with pip instead.")
 endif()
 
@@ -125,7 +125,11 @@ if(TARGET_CPU STREQUAL "x86_64")
     endif()
 endif()
 
-string(TIMESTAMP BUILDDATE "%Y%m%d" UTC)
+set(BUILD_VERSION "" CACHE STRING "Build version: engine version + build number (e.g. v0.41.0+1); empty = read from version.txt")
+if(BUILD_VERSION STREQUAL "")
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/version.txt BUILD_VERSION)
+    string(STRIP "${BUILD_VERSION}" BUILD_VERSION)
+endif()
 
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/publish.in)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/publish.in ${CMAKE_CURRENT_BINARY_DIR}/publish)
