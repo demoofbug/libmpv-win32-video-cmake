@@ -31,9 +31,9 @@ ExternalProject_Add(ffmpeg
     GIT_REPOSITORY https://github.com/FFmpeg/FFmpeg.git
     SOURCE_DIR ${SOURCE_LOCATION}
     GIT_CLONE_FLAGS "--sparse --filter=tree:0"
-    GIT_TAG release/7.1
+    GIT_TAG n9.0.2
     GIT_CLONE_POST_COMMAND "sparse-checkout set --no-cone /* !tests/ref/fate"
-    PATCH_COMMAND ${EXEC} git apply ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-*.patch
+    PATCH_COMMAND ${EXEC} git am --3way ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-*.patch
     UPDATE_COMMAND ""
     CONFIGURE_COMMAND ${EXEC} CONF=1 <SOURCE_DIR>/configure
         --cross-prefix=${TARGET_ARCH}-
@@ -60,7 +60,6 @@ ExternalProject_Add(ffmpeg
         --disable-protocols
         --disable-filters
         --disable-doc
-        --disable-postproc
         --disable-programs
         --disable-gray
         --disable-swscale-alpha
@@ -94,6 +93,8 @@ ExternalProject_Add(ffmpeg
         --enable-libssh
 
         --enable-libjxl
+        --enable-libdav1d
+        --enable-libxml2
 
         --enable-avutil
         --enable-avcodec
@@ -132,7 +133,6 @@ ExternalProject_Add(ffmpeg
         --enable-decoder=truehd
 
         --enable-decoder=mjpeg
-        --enable-decoder=ljpeg
         --enable-decoder=jpegls
         --enable-decoder=jpeg2000
         --enable-decoder=png
@@ -141,6 +141,46 @@ ExternalProject_Add(ffmpeg
         --enable-decoder=tiff
         --enable-decoder=webp
         --enable-decoder=jpegls
+
+        --enable-decoder=flv
+        --enable-decoder=h263
+        --enable-decoder=h263i
+        --enable-decoder=h263p
+        --enable-decoder=h264
+        --enable-decoder=mpeg1video
+        --enable-decoder=mpeg2video
+        --enable-decoder=mpeg4
+        --enable-decoder=vp6
+        --enable-decoder=vp6a
+        --enable-decoder=vp6f
+        --enable-decoder=vp8
+        --enable-decoder=vp9
+        --enable-decoder=hevc
+        --enable-decoder=av1
+        --enable-decoder=libdav1d
+        --enable-decoder=theora
+        --enable-decoder=msmpeg4v1
+        --enable-decoder=msmpeg4v2
+        --enable-decoder=msmpeg4v3
+        --enable-decoder=wmv1
+        --enable-decoder=wmv2
+        --enable-decoder=wmv3
+        --enable-decoder=wmv3image
+
+        --enable-decoder=ssa
+        --enable-decoder=ass
+        --enable-decoder=dvbsub
+        --enable-decoder=dvdsub
+        --enable-decoder=pgssub
+        --enable-decoder=srt
+        --enable-decoder=stl
+        --enable-decoder=subrip
+        --enable-decoder=subviewer
+        --enable-decoder=subviewer1
+        --enable-decoder=text
+        --enable-decoder=vplayer
+        --enable-decoder=webvtt
+        --enable-decoder=movtext
 
         --enable-demuxer=aac
         --enable-demuxer=ac3
@@ -168,8 +208,29 @@ ExternalProject_Add(ffmpeg
         --enable-demuxer=dsf
         --enable-demuxer=dts
         --enable-demuxer=truehd
-        --enable-demuxer=dts
         --enable-demuxer=dtshd
+
+        --enable-demuxer=concat
+        --enable-demuxer=data
+        --enable-demuxer=hls
+        --enable-demuxer=live_flv
+        --enable-demuxer=loas
+        --enable-demuxer=mpegps
+        --enable-demuxer=mpegts
+        --enable-demuxer=mpegvideo
+        --enable-demuxer=hevc
+        --enable-demuxer=rtsp
+        --enable-demuxer=mjpeg
+        --enable-demuxer=av1
+        --enable-demuxer=dash
+        --enable-demuxer=webm_dash_manifest
+        --enable-demuxer=ass
+        --enable-demuxer=srt
+        --enable-demuxer=stl
+        --enable-demuxer=webvtt
+        --enable-demuxer=subviewer
+        --enable-demuxer=subviewer1
+        --enable-demuxer=vplayer
 
         --enable-parser=aac*
         --enable-parser=ac3
@@ -180,6 +241,11 @@ ExternalProject_Add(ffmpeg
         --enable-parser=tak
         --enable-parser=vorbis
         --enable-parser=dca
+        --enable-parser=h263
+        --enable-parser=h264
+        --enable-parser=hevc
+        --enable-parser=mpeg4video
+        --enable-parser=mpegvideo
 
         --enable-filter=overlay
         --enable-filter=equalizer
@@ -191,7 +257,6 @@ ExternalProject_Add(ffmpeg
         --enable-protocol=ffrtmphttp
         --enable-protocol=file
         --enable-protocol=ftp
-        --enable-protocol=hls
         --enable-protocol=http
         --enable-protocol=httpproxy
         --enable-protocol=https
