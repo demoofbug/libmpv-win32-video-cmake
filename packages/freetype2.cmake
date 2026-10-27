@@ -4,6 +4,7 @@ ExternalProject_Add(freetype2
         zlib
         brotli
     GIT_REPOSITORY https://github.com/freetype/freetype.git
+    GIT_TAG VER-2-14-3
     SOURCE_DIR ${SOURCE_LOCATION}
     GIT_CLONE_FLAGS "--filter=tree:0"
     GIT_SUBMODULES ""

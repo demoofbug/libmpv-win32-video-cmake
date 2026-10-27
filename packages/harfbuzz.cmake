@@ -5,7 +5,7 @@ ExternalProject_Add(harfbuzz
     GIT_REPOSITORY https://github.com/harfbuzz/harfbuzz.git
     SOURCE_DIR ${SOURCE_LOCATION}
     GIT_REMOTE_NAME origin
-    GIT_TAG main
+    GIT_TAG 15.0.0
     GIT_CLONE_FLAGS "--sparse --filter=tree:0"
     GIT_CLONE_POST_COMMAND "sparse-checkout set --no-cone /* !test"
     UPDATE_COMMAND ""
@@ -18,6 +18,7 @@ ExternalProject_Add(harfbuzz
         -Dicu=disabled
         -Dglib=disabled
         -Dgobject=disabled
+        -Dutilities=disabled
         -Dtests=disabled
         -Ddocs=disabled
         -Dbenchmark=disabled

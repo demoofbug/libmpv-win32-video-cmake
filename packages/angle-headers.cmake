@@ -3,6 +3,9 @@ ExternalProject_Add(angle-headers
     SOURCE_DIR ${SOURCE_LOCATION}
     GIT_REMOTE_NAME origin
     GIT_TAG main
+    # ANGLE dropped the D3D9 backend constants from include/EGL/eglext_angle.h;
+    # mpv 0.41's context_angle.c still uses EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE.
+    GIT_RESET 0cb8023c01f92b29f3738ea7472d06f8f059ed84
     GIT_CLONE_FLAGS "--sparse --filter=tree:0"
     GIT_CLONE_POST_COMMAND "sparse-checkout set --no-cone include/EGL include/KHR"
     GIT_SUBMODULES ""
