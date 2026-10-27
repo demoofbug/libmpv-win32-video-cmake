@@ -8,9 +8,9 @@ ExternalProject_Add(libplacebo
         lcms2
         glad
         fast_float
-        libdovi
         xxhash
     GIT_REPOSITORY https://github.com/haasn/libplacebo.git
+    GIT_TAG v7.360.1
     SOURCE_DIR ${SOURCE_LOCATION}
     GIT_CLONE_FLAGS "--filter=tree:0"
     GIT_SUBMODULES ""
